@@ -1,0 +1,177 @@
+:root {
+  --bg: #ece9e3;
+  --paper: #fffdf9;
+  --ink: #23262c;
+  --muted: #6b7078;
+  --line: #e2ded5;
+  --accent: #3a56b4;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  line-height: 1.55;
+}
+h1, h2, h3, p { margin: 0; }
+button { font: inherit; cursor: pointer; }
+
+/* ---------- kétoszlopos elrendezés: GUI balra, oldalak jobbra ---------- */
+.app { display: flex; align-items: flex-start; gap: 20px; padding: 16px; }
+.sidebar {
+  position: sticky; top: 16px;
+  flex: 0 0 250px;
+  display: flex; flex-direction: column; gap: 14px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 14px;
+  box-shadow: 0 2px 16px rgba(25, 28, 45, .07);
+}
+.sidebar h1 { font-size: 1.05rem; }
+.sub { color: var(--muted); font-size: .8rem; }
+.actions { display: flex; flex-direction: column; gap: 8px; }
+.btn {
+  border: 1px solid var(--line); background: #fff;
+  padding: 8px 14px; border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 20, 40, .06);
+}
+.btn:hover { background: #f6f8ff; border-color: #c9d3f5; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:hover { background: #4464d6; }
+.actions .btn { width: 100%; text-align: left; }
+.tip { color: var(--muted); font-size: .78rem; }
+.goto { font-size: .78rem; }
+.goto a { color: var(--accent); text-decoration: none; }
+.goto a:hover { text-decoration: underline; }
+main { flex: 1 1 auto; min-width: 0; }
+
+/* ---------- nyomtatható oldalak ---------- */
+main .page {
+  width: 210mm; min-height: 297mm;
+  background: var(--paper);
+  margin: 0 auto 28px;
+  padding: 16mm 15mm;
+  box-shadow: 0 3px 24px rgba(20, 24, 40, .16);
+  border-radius: 2px;
+}
+.sheet-head {
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 12px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 8px; margin-bottom: 14px;
+}
+.sheet-title h2 { font-family: Georgia, "Times New Roman", serif; font-size: 1.5rem; }
+.grade-line { color: var(--muted); font-size: .85rem; }
+.fill-lines { display: flex; gap: 18px; font-size: .85rem; color: #333; white-space: nowrap; }
+
+/* ---------- csoportok ---------- */
+.group { margin: 0 0 18px; }
+.group-head {
+  --hue: 258;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  background: hsl(var(--hue) 60% 97%);
+  border: 1px solid hsl(var(--hue) 45% 86%);
+  border-left: 5px solid hsl(var(--hue) 55% 55%);
+  border-radius: 10px;
+  padding: 8px 12px; margin-bottom: 10px;
+  break-inside: avoid;
+}
+.group-title { flex: 1 1 auto; }
+.group-head h3 { font-size: 1rem; color: hsl(var(--hue) 55% 30%); }
+.group-hint { margin-top: 2px; font-size: .78rem; color: #4a4f59; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; flex: 0 0 auto; }
+.chip {
+  font-size: .72rem; padding: 2px 9px; border-radius: 999px; border: 1px solid;
+  font-family: Consolas, "Cascadia Code", monospace;
+  background: hsl(var(--hue) 90% 92%);
+  border-color: hsl(var(--hue) 50% 78%);
+  color: hsl(var(--hue) 55% 28%);
+  white-space: nowrap;
+}
+.chip.grade { font-family: inherit; background: #fff; }
+
+/* ---------- feladatkártyák ---------- */
+.tasks { display: grid; gap: 8px; }
+.task-card {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 9px 10px;
+  border: 1px dashed #d5d0c5; border-radius: 10px; background: #fff;
+  cursor: pointer;
+  break-inside: avoid;
+  transition: border-color .15s, background .15s;
+}
+.task-card:hover, .task-card:focus-visible,
+.key-item:hover, .key-item:focus-visible {
+  border-color: hsl(var(--hue) 60% 70%);
+  background: hsl(var(--hue) 75% 98%);
+}
+.task-card:hover .dice, .task-card:focus-visible .dice,
+.key-item:hover .dice, .key-item:focus-visible .dice {
+  opacity: 1; transform: rotate(-18deg) scale(1.1);
+}
+.t-num {
+  font-weight: 700; font-size: .95rem; line-height: 1.55;
+  min-width: 1.7em; color: hsl(var(--hue) 55% 40%);
+}
+.t-body { flex: 1 1 auto; min-width: 0; }
+.t-text { display: block; font-family: Georgia, "Times New Roman", serif; font-size: .98rem; }
+.t-calc { display: flex; gap: 10px; align-items: flex-end; margin-top: 7px; color: var(--muted); font-size: .8rem; white-space: nowrap; }
+.dots { display: inline-block; width: 44mm; border-bottom: 1.4px dotted #b4afa4; height: 1em; }
+.dots.ans { width: 26mm; }
+.dice { margin-left: auto; font-size: .9rem; line-height: 1.5; opacity: 0; transition: .15s; }
+
+/* ---------- megoldókulcs ---------- */
+.key { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 28px; }
+.key-item {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 8px; border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer; break-inside: avoid;
+}
+.key-item:hover, .key-item:focus-visible { border-color: #ddd3b8; background: #fffdf0; }
+.k-num { font-weight: 700; color: var(--accent); min-width: 1.7em; }
+.k-sol { font-family: Georgia, "Times New Roman", serif; }
+.key-note { margin-top: 14px; color: var(--muted); font-size: .78rem; }
+
+/* ---------- egyéb ---------- */
+.flash { animation: flash .9s ease-out; }
+@keyframes flash { 0% { background: #ffefaf; } 100% { background: transparent; } }
+
+.foot {
+  padding: 0 16px 30px;
+  color: var(--muted); font-size: .78rem;
+}
+body.no-key #answers { display: none; }
+
+@media (max-width: 900px) {
+  .app { flex-direction: column; }
+  .sidebar { position: static; width: 100%; flex: none; }
+  .actions { flex-direction: row; flex-wrap: wrap; }
+  .actions .btn { width: auto; flex: 1 1 auto; }
+}
+@media (max-width: 840px) {
+  .page { width: auto; min-height: 0; padding: 18px; box-shadow: 0 2px 14px rgba(20, 24, 40, .12); }
+  .sheet-head { flex-direction: column; align-items: flex-start; }
+  .key { columns: 1; }
+  .dots { width: 10rem; }
+}
+
+/* ---------- nyomtatás ---------- */
+@media print {
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { background: #fff; }
+  .no-print { display: none !important; }
+  .app { display: block; padding: 0; gap: 0; }
+  .page {
+    width: auto; min-height: 0; margin: 0; padding: 4mm;
+    box-shadow: none; border-radius: 0;
+  }
+  #answers { page-break-before: always; }
+  .task-card, .key-item, .group-head { break-inside: avoid; }
+  .task-card { border-style: solid; border-color: #cfcabf; }
+  .dice { display: none; }
+  .flash { animation: none; }
+}
