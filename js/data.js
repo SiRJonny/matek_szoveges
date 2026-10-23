@@ -1,11 +1,101 @@
 "use strict";
 
-/* Szöveges feladatok adatmodellje.
-   Minden feladat generátor: véletlenszámokat sorsol, majd szöveget és
-   megoldási lépést ad vissza. A csoportok megoldási logika szerint vannak
-   rendezve (a fejlécben jelzett képlettel). */
+/* Adatmodell:
+   - 8 feladatcsoport, megoldási logika szerint (képlet a csoport fejlécében)
+   - csoportonként 6 valódi szövegű feladat (pool), egyszerre 3 látszik belőlük
+   - minden feladatsablon számmodellt hív; a számokat a beállítások
+     (operandus/eredmény tartomány, negatív engedélyezése) korlátozzák
+   - ctx = { ranges: {opMin, opMax, resMin, resMax}, neg } */
 
-const ri = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+/* Toleráns sorsolás: ha a tartomány érvénytelen, összeomlik a min-re. */
+function looseInt(lo, hi) {
+  lo = Math.ceil(lo); hi = Math.floor(hi);
+  if (hi < lo) hi = lo;
+  return Math.floor(Math.random() * (hi - lo + 1)) + lo;
+}
+
+/* --- számmodellek ----------------------------------------------- */
+
+/* Összeg: a + b = x */
+function sumPair(ctx) {
+  const { opMin, opMax, resMin, resMax } = ctx.ranges;
+  const x = looseInt(Math.max(resMin, 2 * opMin), Math.min(resMax, 2 * opMax));
+  const a = looseInt(Math.max(opMin, x - opMax, 1), Math.min(opMax, x - 1));
+  return { a, b: x - a, x };
+}
+
+/* Különbség: a − b = x (negatív eredmény csak ctx.neg esetén) */
+function diff(ctx) {
+  const { opMin, opMax, resMin, resMax } = ctx.ranges;
+  const floor = ctx.neg ? -999 : Math.max(resMin, 0);
+  const x = looseInt(Math.max(floor, 1 - opMax), Math.min(resMax, opMax - 1));
+  const b = looseInt(Math.max(1, opMin - x), Math.min(opMax, opMax - x));
+  return { a: x + b, b, x };
+}
+
+/* Hiányzó rész: a + x = b, x = b − a (eredmény mindig ≥ 1) */
+function missing(ctx) {
+  const { opMin, opMax, resMin, resMax } = ctx.ranges;
+  const x = looseInt(Math.max(1, resMin), Math.min(resMax, opMax - Math.max(1, opMin)));
+  const b = looseInt(opMin + x, opMax);
+  return { a: b - x, b, x };
+}
+
+/* Kettős adat: a + (a + b) = x, azaz x = 2a + b */
+function multi(ctx) {
+  const { opMin, opMax, resMin, resMax } = ctx.ranges;
+  const ahi = Math.min(opMax, Math.floor((resMax - 1) / 2));
+  const a = looseInt(Math.min(opMin, ahi), ahi);
+  const b = looseInt(Math.max(1, resMin - 2 * a), Math.min(opMax, resMax - 2 * a));
+  return { a, b, x: 2 * a + b };
+}
+
+/* Szorzás: a × b = x */
+function product(ctx) {
+  const { opMin, opMax, resMin, resMax } = ctx.ranges;
+  const ahi = Math.min(opMax, Math.max(2, Math.floor(resMax / 2)));
+  const a = looseInt(Math.max(2, Math.min(opMin, ahi)), ahi);
+  const b = looseInt(Math.max(2, Math.ceil(resMin / a)), Math.min(opMax, Math.floor(resMax / a)));
+  return { a, b, x: a * b };
+}
+
+/* Osztás: a ÷ b = q (osztandó a, osztó b, hányados az eredmény) */
+function quotient(ctx) {
+  const { opMin, opMax, resMin, resMax } = ctx.ranges;
+  const qhi = Math.min(resMax, Math.floor(opMax / 2));
+  const q = looseInt(Math.max(1, Math.min(resMin, qhi)), qhi);
+  const b = looseInt(Math.max(2, Math.min(opMin, Math.floor(opMax / q))), Math.min(opMax, Math.floor(opMax / q)));
+  return { a: q * b, b, x: q };
+}
+
+/* Fizetés: p − (a × b) = x (p = fizetett, x = visszajáró; negatív = tartozás) */
+function checkout(ctx) {
+  const { opMin, opMax, resMin, resMax } = ctx.ranges;
+  const floor = ctx.neg ? -999 : Math.max(resMin, 0);
+  const ahi = Math.min(opMax, Math.max(2, Math.floor(opMax / 2)));
+  const a = looseInt(Math.max(2, Math.min(opMin, ahi)), ahi);
+  const b = looseInt(Math.max(2, 2), Math.min(opMax, Math.floor(opMax / a)));
+  const p = a * b;
+  const x = looseInt(Math.max(floor, resMin, -p), Math.min(resMax, opMax - p));
+  return { a, b, p: p + x, x };
+}
+
+/* Összeszedve szétosztva: (a + b) ÷ c = q */
+function shareSum(ctx) {
+  const { opMin, opMax, resMin, resMax } = ctx.ranges;
+  const chi = Math.min(opMax, Math.max(2, Math.floor(2 * opMax / Math.max(1, resMin))));
+  const c = looseInt(Math.max(2, Math.min(opMin, chi)), chi);
+  const qhi = Math.min(resMax, Math.max(1, Math.floor(2 * opMax / c)));
+  const q = looseInt(Math.max(1, Math.min(resMin, qhi)), qhi);
+  const sum = q * c;
+  const alo = Math.max(1, sum - opMax);
+  const ahi = Math.min(opMax, sum - 1);
+  const prefer = Math.max(alo, opMin);
+  const a = prefer <= ahi ? looseInt(prefer, ahi) : looseInt(alo, ahi);
+  return { a, b: sum - a, c, x: q };
+}
+
+/* --- csoportok --------------------------------------------------- */
 
 const GROUPS = [
   {
@@ -13,36 +103,50 @@ const GROUPS = [
     formula: "x = A + B",
     grade: "1. osztály",
     hint: "Két adatot kell összeadni, a kérdés mindig az összegre kérdez.",
-    exercises: [
+    num: (ctx) => sumPair(ctx),
+    work: (n, u) => `${n.a} + ${n.b} = ${n.x} ${u}`,
+    pool: [
       {
         id: "gesztenye",
-        build: () => {
-          const a = ri(2, 9), b = ri(2, 9), s = a + b;
-          return {
-            text: `Benedek ${a} gesztenyét talált a fűben, utána még ${b} gesztenyét szedett össze a játszótéren. Hány gesztenyéje lett összesen?`,
-            work: `${a} + ${b} = ${s} gesztenye`,
-          };
-        },
+        unit: "gesztenye",
+        gen: (n) => ({
+          text: `Benedek ${n.a} gesztenyét talált a fűben, utána még ${n.b} gesztenyét szedett össze a játszótéren. Hány gesztenyéje lett összesen?`,
+        }),
       },
       {
-        id: "viragok",
-        build: () => {
-          const a = ri(2, 9), b = ri(2, 9), s = a + b;
-          return {
-            text: `Luca ${a} piros és ${b} sárga virágot szedett a mezőn. Hány virágot szedett összesen?`,
-            work: `${a} + ${b} = ${s} virág`,
-          };
-        },
+        id: "virag",
+        unit: "virág",
+        gen: (n) => ({
+          text: `Luca ${n.a} piros és ${n.b} sárga virágot szedett a mezőn. Hány virágot szedett összesen?`,
+        }),
       },
       {
-        id: "ceruzak",
-        build: () => {
-          const a = ri(2, 9), b = ri(2, 9), s = a + b;
-          return {
-            text: `Botond ${a} ceruzát kapott a nagymamától és ${b} ceruzát a nagypapától. Hány ceruzája lett összesen?`,
-            work: `${a} + ${b} = ${s} ceruza`,
-          };
-        },
+        id: "ceruza",
+        unit: "ceruza",
+        gen: (n) => ({
+          text: `Botond ${n.a} ceruzát kapott a nagymamától és ${n.b} ceruzát a nagypapától. Hány ceruzája lett összesen?`,
+        }),
+      },
+      {
+        id: "polc",
+        unit: "mesekönyv",
+        gen: (n) => ({
+          text: `A polcon ${n.a} magyar és ${n.b} angol mesekönyv van. Hány mesekönyv van összesen a polcon?`,
+        }),
+      },
+      {
+        id: "szulinap",
+        unit: "gyerek",
+        gen: (n) => ({
+          text: `A születésnapi partin ${n.a} fiú és ${n.b} lány mulat. Hány gyerek van összesen a partin?`,
+        }),
+      },
+      {
+        id: "vereb",
+        unit: "veréb",
+        gen: (n) => ({
+          text: `Délelőtt ${n.a} veréb, délután még ${n.b} veréb ereszkedett le az etetőre. Hány veréb járt az etetőn összesen?`,
+        }),
       },
     ],
   },
@@ -51,36 +155,50 @@ const GROUPS = [
     formula: "x = A − B",
     grade: "1. osztály",
     hint: "A kezdeti mennyiségből elveszünk valamennyit, a maradék a kivonás eredménye.",
-    exercises: [
+    num: (ctx) => diff(ctx),
+    work: (n, u) => `${n.a} − ${n.b} = ${n.x} ${u}`,
+    pool: [
       {
         id: "golyok",
-        build: () => {
-          const a = ri(6, 19), b = ri(2, a - 1), r = a - b;
-          return {
-            text: `Hugó ${a} golyóval játszott a homokozóban, majd ${b} golyót odaadott a kishúgának. Hány golyója maradt?`,
-            work: `${a} − ${b} = ${r} golyó`,
-          };
-        },
+        unit: "golyó",
+        gen: (n) => ({
+          text: `Hugó ${n.a} golyóval játszott a homokozóban, majd ${n.b} golyót odaadott a kishúgának. Hány golyója maradt?`,
+        }),
       },
       {
-        id: "szilvak",
-        build: () => {
-          const a = ri(6, 19), b = ri(2, a - 1), r = a - b;
-          return {
-            text: `Réka ${a} szilvát vitt az iskolába, de útközben ${b} szilvát megevett. Hány szilvája maradt?`,
-            work: `${a} − ${b} = ${r} szilva`,
-          };
-        },
+        id: "szilva",
+        unit: "szilva",
+        gen: (n) => ({
+          text: `Réka ${n.a} szilvát vitt az iskolába, útközben ${n.b} szilvát megevett. Hány szilvája maradt?`,
+        }),
       },
       {
         id: "lufik",
-        build: () => {
-          const a = ri(6, 19), b = ri(2, a - 1), r = a - b;
-          return {
-            text: `Péter ${a} lufit kapott a farsangi mulatságon, ${b} elszállt az ég felé. Hány lufija maradt?`,
-            work: `${a} − ${b} = ${r} lufi`,
-          };
-        },
+        unit: "lufi",
+        gen: (n) => ({
+          text: `Péter ${n.a} lufit kapott a farsangi mulatságon, ${n.b} elszállt az ég felé. Hány lufija maradt?`,
+        }),
+      },
+      {
+        id: "matek-feladat",
+        unit: "feladat",
+        gen: (n) => ({
+          text: `Máté ${n.a} matematika feladatot kapott házi feladatként, ${n.b} feladatot ma már megoldott. Hány feladat vár még rá?`,
+        }),
+      },
+      {
+        id: "torta-szelet",
+        unit: "szelet",
+        gen: (n) => ({
+          text: `Eszter ${n.a} szelet tortát vitt a szülinapi ünnepségre, ${n.b} szeletet elfogyasztottak. Hány szelet torta maradt?`,
+        }),
+      },
+      {
+        id: "hajo-utas",
+        unit: "utas",
+        gen: (n) => ({
+          text: `A kis hajón ${n.a} utas utazott, ${n.b} utas kiszállt a kikötőben. Hány utas maradt a hajón?`,
+        }),
       },
     ],
   },
@@ -89,38 +207,50 @@ const GROUPS = [
     formula: "x = B − A   (A + x = B)",
     grade: "1–2. osztály",
     hint: "Valamennyi hiányzik az összeshez: az összesből kivonjuk a már meglévő részt.",
-    exercises: [
+    num: (ctx) => missing(ctx),
+    work: (n, u) => `${n.b} − ${n.a} = ${n.x} ${u}`,
+    pool: [
       {
         id: "busz",
-        build: () => {
-          const b = ri(8, 28), a = ri(2, b - 1), d = b - a;
-          return {
-            text: `Az osztálykirándulásra ${b} gyerek regisztrált, ${a} gyerek már beült a buszba. Hány gyerek száll még be a buszba?`,
-            work: `${b} − ${a} = ${d} gyerek`,
-          };
-        },
+        unit: "gyerek",
+        gen: (n) => ({
+          text: `Az osztálykirándulásra ${n.b} gyerek regisztrált, ${n.a} gyerek már beült a buszba. Hány gyerek száll még be a buszba?`,
+        }),
       },
       {
         id: "lanyok",
-        build: () => {
-          const b = ri(8, 30), a = ri(2, b - 1), d = b - a;
-          return {
-            text: `Az osztályban ${b} gyerek van, ${a} közülük fiú. Hány lány van az osztályban?`,
-            work: `${b} − ${a} = ${d} lány`,
-          };
-        },
+        unit: "lány",
+        gen: (n) => ({
+          text: `Az osztályban ${n.b} gyerek van, ${n.a} közülük fiú. Hány lány van az osztályban?`,
+        }),
       },
       {
         id: "toll",
-        build: () => {
-          const b = 50 + 10 * ri(1, 43);
-          const r = 10 * ri(1, Math.min(7, b / 10 - 1));
-          const a = b - r;
-          return {
-            text: `Bianka egy ${b} forintos tollat akar venni, a zsebében ${a} forint van. Mennyi pénz hiányzik még a tollhoz?`,
-            work: `${b} − ${a} = ${r} Ft`,
-          };
-        },
+        unit: "Ft",
+        gen: (n) => ({
+          text: `Bianka egy ${n.b} forintos tollat akar venni, a zsebében ${n.a} forint van. Mennyi pénz hiányzik még a tollhoz?`,
+        }),
+      },
+      {
+        id: "penzgyujtes",
+        unit: "Ft",
+        gen: (n) => ({
+          text: `A kiránduláshoz összesen ${n.b} forintot kell gyűjteni, eddig ${n.a} forintot gyűjtöttek össze. Mennyi pénz hiányzik még?`,
+        }),
+      },
+      {
+        id: "konyv-lap",
+        unit: "lap",
+        gen: (n) => ({
+          text: `Egy mesekönyv ${n.b} lapból áll, Dorina eddig ${n.a} lapot olvasott el. Hány lap van még hátra a végéig?`,
+        }),
+      },
+      {
+        id: "kirako",
+        unit: "darabka",
+        gen: (n) => ({
+          text: `Egy kirakó ${n.b} darabkából áll, Anna már ${n.a} darabkát illesztett össze. Hány darabka van még hátra?`,
+        }),
       },
     ],
   },
@@ -129,36 +259,50 @@ const GROUPS = [
     formula: "x = A + (A + B)",
     grade: "2. osztály",
     hint: "Előbb kiszámoljuk a nagyobb mennyiséget (A + B), majd a kettő összegét.",
-    exercises: [
+    num: (ctx) => multi(ctx),
+    work: (n, u) => `${n.a} + (${n.a} + ${n.b}) = ${n.a} + ${n.x - n.a} = ${n.x} ${u}`,
+    pool: [
       {
         id: "kisautok",
-        build: () => {
-          const a = ri(3, 12), b = ri(2, 9), s = 2 * a + b;
-          return {
-            text: `Zalánnak ${a} kisautója van, a kishúgának ${b}-vel több kisautója van. Hány kisautójuk van együtt?`,
-            work: `${a} + (${a} + ${b}) = ${a} + ${a + b} = ${s} kisautó`,
-          };
-        },
+        unit: "kisautó",
+        gen: (n) => ({
+          text: `Zalánnak ${n.a} kisautója van, kishúgának ${n.b}-vel több kisautója van. Hány kisautójuk van együtt?`,
+        }),
       },
       {
         id: "gumicukor",
-        build: () => {
-          const a = ri(3, 12), b = ri(2, 9), s = 2 * a + b;
-          return {
-            text: `Levi ${a} gumicukrot evett a moziban, nővére ${b}-vel többet. Hány gumicukrot ettek együtt?`,
-            work: `${a} + (${a} + ${b}) = ${a} + ${a + b} = ${s} gumicukor`,
-          };
-        },
+        unit: "gumicukor",
+        gen: (n) => ({
+          text: `Levi ${n.a} gumicukrot evett a moziban, nővére ${n.b}-vel többet. Hány gumicukrot ettek együtt?`,
+        }),
       },
       {
         id: "mesekonyvek",
-        build: () => {
-          const a = ri(3, 12), b = ri(2, 9), s = 2 * a + b;
-          return {
-            text: `Evelin ${a} mesekönyvet olvasott el idén, a bátyja ${b} mesekönyvvel többet. Hány mesekönyvet olvastak el ketten együtt?`,
-            work: `${a} + (${a} + ${b}) = ${a} + ${a + b} = ${s} mesekönyv`,
-          };
-        },
+        unit: "mesekönyv",
+        gen: (n) => ({
+          text: `Evelin ${n.a} mesekönyvet olvasott el idén, a bátyja ${n.b} mesekönyvvel többet. Hány mesekönyvet olvastak el ketten együtt?`,
+        }),
+      },
+      {
+        id: "lego-var",
+        unit: "kocka",
+        gen: (n) => ({
+          text: `Áron ${n.a} kockából épített várat, kishúga ${n.b} kockával több elemet használt. Hány kockából épült a két vár együtt?`,
+        }),
+      },
+      {
+        id: "matrica-teso",
+        unit: "matrica",
+        gen: (n) => ({
+          text: `Olivér ${n.a} matricát kapott, a tesója ${n.b} matricával többet. Hány matricájuk lett együtt?`,
+        }),
+      },
+      {
+        id: "papirrepulo",
+        unit: "papírrepülő",
+        gen: (n) => ({
+          text: `Máté ${n.a} papírrepülőt hajtogatott, a testvére ${n.b} repülővel többet. Hány papírrepülő készült összesen?`,
+        }),
       },
     ],
   },
@@ -167,36 +311,50 @@ const GROUPS = [
     formula: "x = A × B",
     grade: "2–3. osztály",
     hint: "B darab, A elemű egyforma csoport: az összes darabszám szorzással jön ki.",
-    exercises: [
+    num: (ctx) => product(ctx),
+    work: (n, u) => `${n.a} × ${n.b} = ${n.x} ${u}`,
+    pool: [
       {
-        id: "matricak",
-        build: () => {
-          const a = ri(2, 9), b = ri(2, 9), p = a * b;
-          return {
-            text: `Egy mappában ${a} matrica van. Hány matrica van ${b} mappában?`,
-            work: `${a} × ${b} = ${p} matrica`,
-          };
-        },
+        id: "matrica-lap",
+        unit: "matrica",
+        gen: (n) => ({
+          text: `Egy matricalap ${n.a} matricát tartalmaz. Hány matrica van ${n.b} matricalapon?`,
+        }),
       },
       {
-        id: "tulipanok",
-        build: () => {
-          const a = ri(2, 9), b = ri(2, 9), p = a * b;
-          return {
-            text: `Egy csokor ${a} tulipánból áll. Hány tulipán van ${b} csokorban?`,
-            work: `${a} × ${b} = ${p} tulipán`,
-          };
-        },
+        id: "tulipan-csokor",
+        unit: "tulipán",
+        gen: (n) => ({
+          text: `Egy csokor ${n.a} tulipánból áll. Hány tulipán van ${n.b} csokorban?`,
+        }),
       },
       {
-        id: "szekek",
-        build: () => {
-          const a = ri(2, 9), b = ri(2, 9), p = a * b;
-          return {
-            text: `Egy rendezvényre ${b} asztalt állítanak fel, mindegyik asztalhoz ${a} szék kerül. Hány szék kell összesen?`,
-            work: `${a} × ${b} = ${p} szék`,
-          };
-        },
+        id: "rendezveny-szek",
+        unit: "szék",
+        gen: (n) => ({
+          text: `Egy rendezvényre ${n.b} asztalt állítanak fel, mindegyik asztalhoz ${n.a} szék kerül. Hány szék kell összesen?`,
+        }),
+      },
+      {
+        id: "kifli-talca",
+        unit: "kifli",
+        gen: (n) => ({
+          text: `Egy pékség ${n.b} tálcát készít, mindegyik tálcán ${n.a} kifli van. Hány kifli van összesen a tálcákon?`,
+        }),
+      },
+      {
+        id: "mandarin-lada",
+        unit: "mandarin",
+        gen: (n) => ({
+          text: `Egy ládában ${n.a} mandarin van. Hány mandarin van ${n.b} ládában?`,
+        }),
+      },
+      {
+        id: "borso-huvely",
+        unit: "borsó",
+        gen: (n) => ({
+          text: `Egy hüvelyben ${n.a} borsó lapul. Hány borsó van ${n.b} hüvelyben?`,
+        }),
       },
     ],
   },
@@ -205,36 +363,50 @@ const GROUPS = [
     formula: "x = A ÷ B",
     grade: "2–3. osztály",
     hint: "Egyenlő részekre osztás vagy kötegelés: az eredményt osztással kapjuk.",
-    exercises: [
+    num: (ctx) => quotient(ctx),
+    work: (n, u) => `${n.a} ÷ ${n.b} = ${n.x} ${u}`,
+    pool: [
       {
         id: "keksz",
-        build: () => {
-          const q = ri(2, 8), b = ri(2, 5), a = q * b;
-          return {
-            text: `Samu ${a} kekszet oszt szét egyenlően ${b} gyerek között. Hány keksz jut mindegyiknek?`,
-            work: `${a} ÷ ${b} = ${q} keksz`,
-          };
-        },
+        unit: "keksz",
+        gen: (n) => ({
+          text: `Samu ${n.a} kekszet oszt szét egyenlően ${n.b} gyerek között. Hány keksz jut mindegyiknek?`,
+        }),
       },
       {
         id: "ceruza-koteg",
-        build: () => {
-          const q = ri(2, 10), b = ri(2, 5), a = q * b;
-          return {
-            text: `Bence ${a} ceruzát egyforma, ${b} ceruzás kötegekbe rendezett. Hány köteget kapott?`,
-            work: `${a} ÷ ${b} = ${q} köteg`,
-          };
-        },
+        unit: "köteg",
+        gen: (n) => ({
+          text: `Bence ${n.a} ceruzát egyforma, ${n.b} ceruzás kötegekbe rendezett. Hány köteget kapott?`,
+        }),
       },
       {
         id: "zsebpenz",
-        build: () => {
-          const q = 5 * ri(2, 18), b = ri(2, 5), a = q * b;
-          return {
-            text: `Édesapa ${a} forintot oszt szét egyenlően ${b} testvér között. Mennyi jut mindegyiküknek?`,
-            work: `${a} ÷ ${b} = ${q} Ft`,
-          };
-        },
+        unit: "Ft",
+        gen: (n) => ({
+          text: `Édesapa ${n.a} forintot oszt szét egyenlően ${n.b} testvér között. Mennyi jut mindegyiküknek?`,
+        }),
+      },
+      {
+        id: "csoki-szelet",
+        unit: "szelet",
+        gen: (n) => ({
+          text: `Édesanya ${n.a} csokiszeletet oszt ki egyenlően ${n.b} gyerek között. Hány szelet jut mindegyiknek?`,
+        }),
+      },
+      {
+        id: "tulipan-kotes",
+        unit: "csokor",
+        gen: (n) => ({
+          text: `A virágárus ${n.a} tulipánt egyforma csokorba kötött, mindegyik csokorba ${n.b} tulipán került. Hány csokrot kötött?`,
+        }),
+      },
+      {
+        id: "szovnyeg-sor",
+        unit: "sor",
+        gen: (n) => ({
+          text: `Egy tornateremben ${n.a} tornaszőnyeget raknak sorokba, mindegyik sorba ${n.b} szőnyeg kerül. Hány sor lesz összesen?`,
+        }),
       },
     ],
   },
@@ -243,36 +415,50 @@ const GROUPS = [
     formula: "x = P − A × B",
     grade: "3–4. osztály",
     hint: "Előbb kiszámoljuk a teljes árat (A × B), majd a fizetett összegből kivonjuk.",
-    exercises: [
+    num: (ctx) => checkout(ctx),
+    work: (n) => `${n.p} − ${n.b} × ${n.a} = ${n.p} − ${n.p - n.x} = ${n.x} Ft`,
+    pool: [
       {
         id: "mozijegy",
-        build: () => {
-          const a = 5 * ri(6, 19), b = ri(2, 5), r = 5 * ri(3, 12), p = a * b + r;
-          return {
-            text: `Egy mozijegy ${a} forint. Zsombor ${b} jegyet vesz, és ${p} forintot ad a pénztárosnak. Mennyi visszajárót kap?`,
-            work: `${p} − ${b} × ${a} = ${p} − ${a * b} = ${r} Ft`,
-          };
-        },
+        unit: "Ft",
+        gen: (n) => ({
+          text: `Egy mozijegy ${n.a} forint. Zsombor ${n.b} jegyet vesz, és ${n.p} forintot ad a pénztárosnak. Mennyi visszajárót kap?`,
+        }),
       },
       {
         id: "belyeg",
-        build: () => {
-          const a = 5 * ri(6, 19), b = ri(2, 5), r = 5 * ri(3, 12), p = a * b + r;
-          return {
-            text: `Egy bélyeg ${a} forint. Dorka ${b} darab bélyeget vesz, és ${p} forintot ad a pénztárosnak. Mennyi a visszajáró?`,
-            work: `${p} − ${b} × ${a} = ${p} − ${a * b} = ${r} Ft`,
-          };
-        },
+        unit: "Ft",
+        gen: (n) => ({
+          text: `Egy bélyeg ${n.a} forint. Dorka ${n.b} darab bélyeget vesz, és ${n.p} forintot ad a pénztárosnak. Mennyi a visszajáró?`,
+        }),
       },
       {
         id: "fagylalt",
-        build: () => {
-          const a = 5 * ri(6, 19), b = ri(2, 4), r = 5 * ri(3, 12), p = a * b + r;
-          return {
-            text: `Egy adag fagylalt ${a} forint. Marci ${b} adagot vesz, és ${p} forintot ad a fagylaltosnak. Mennyi visszajárót kap?`,
-            work: `${p} − ${b} × ${a} = ${p} − ${a * b} = ${r} Ft`,
-          };
-        },
+        unit: "Ft",
+        gen: (n) => ({
+          text: `Egy adag fagylalt ${n.a} forint. Marci ${n.b} adagot vesz, és ${n.p} forintot ad a fagylaltosnak. Mennyi visszajárót kap?`,
+        }),
+      },
+      {
+        id: "udito",
+        unit: "Ft",
+        gen: (n) => ({
+          text: `Egy üveg üdítő ${n.a} forint. Zsófi ${n.b} üveget vesz, és ${n.p} forintot ad a pénztárosnak. Mennyi visszajárót kap?`,
+        }),
+      },
+      {
+        id: "fuzet",
+        unit: "Ft",
+        gen: (n) => ({
+          text: `Egy füzet ${n.a} forint. Anna ${n.b} füzetet vesz, és ${n.p} forintot ad a boltosnak. Mennyi visszajárót kap?`,
+        }),
+      },
+      {
+        id: "pizza",
+        unit: "Ft",
+        gen: (n) => ({
+          text: `Egy szelet pizza ${n.a} forint. Levente ${n.b} szeletet vesz, és ${n.p} forintot ad a pénztárosnak. Mennyi a visszajáró?`,
+        }),
       },
     ],
   },
@@ -281,36 +467,50 @@ const GROUPS = [
     formula: "x = (A + B) ÷ C",
     grade: "3–4. osztály",
     hint: "Először összeszedjük a két adatot (A + B), aztán egyenlő részekre osztjuk.",
-    exercises: [
+    num: (ctx) => shareSum(ctx),
+    work: (n, u) => `(${n.a} + ${n.b}) ÷ ${n.c} = ${n.a + n.b} ÷ ${n.c} = ${n.x} ${u}`,
+    pool: [
       {
         id: "dio-mokus",
-        build: () => {
-          const q = ri(2, 12), c = ri(2, 5), sum = q * c, a = 2 + ri(0, sum - 4), b = sum - a;
-          return {
-            text: `Két kosárban ${a} és ${b} dió van. A diókat egyenlően szétosztják ${c} mókus között. Hány dió jut mindegyik mókusnak?`,
-            work: `(${a} + ${b}) ÷ ${c} = ${sum} ÷ ${c} = ${q} dió`,
-          };
-        },
+        unit: "dió",
+        gen: (n) => ({
+          text: `Két kosárban ${n.a} és ${n.b} dió van. A diókat egyenlően szétosztják ${n.c} mókus között. Hány dió jut mindegyik mókusnak?`,
+        }),
       },
       {
         id: "csoki-kocka",
-        build: () => {
-          const q = ri(2, 12), c = ri(2, 5), sum = q * c, a = 2 + ri(0, sum - 4), b = sum - a;
-          return {
-            text: `Két csokitáblán ${a} és ${b} kocka van. A kockákat egyenlően szétosztják ${c} gyerek között. Hány kocka jut mindegyiküknek?`,
-            work: `(${a} + ${b}) ÷ ${c} = ${sum} ÷ ${c} = ${q} kocka`,
-          };
-        },
+        unit: "kocka",
+        gen: (n) => ({
+          text: `Két csokitáblán ${n.a} és ${n.b} kocka van. A kockákat egyenlően szétosztják ${n.c} gyerek között. Hány kocka jut mindegyiküknek?`,
+        }),
       },
       {
         id: "szoloszem",
-        build: () => {
-          const q = ri(2, 12), c = ri(2, 5), sum = q * c, a = 2 + ri(0, sum - 4), b = sum - a;
-          return {
-            text: `Két kosárban ${a} és ${b} szőlőszem van. A szemeket egyenlően szétosztják ${c} gyermek között. Hány szem jut mindegyiküknek?`,
-            work: `(${a} + ${b}) ÷ ${c} = ${sum} ÷ ${c} = ${q} szem`,
-          };
-        },
+        unit: "szem",
+        gen: (n) => ({
+          text: `Két kosárban ${n.a} és ${n.b} szőlőszem van. A szemeket egyenlően szétosztják ${n.c} gyermek között. Hány szem jut mindegyiküknek?`,
+        }),
+      },
+      {
+        id: "szendvics-taska",
+        unit: "szendvics",
+        gen: (n) => ({
+          text: `Két táskában ${n.a} és ${n.b} szendvics van. A szendvicseket egyenlően osztják el ${n.c} kiránduló között. Hány szendvics jut mindegyiküknek?`,
+        }),
+      },
+      {
+        id: "epitokocka",
+        unit: "kocka",
+        gen: (n) => ({
+          text: `Két dobozban ${n.a} és ${n.b} építőkocka van. A kockákat egyenlően osztják szét ${n.c} gyerek között. Hány kocka jut mindegyik gyereknek?`,
+        }),
+      },
+      {
+        id: "korong-jatek",
+        unit: "korong",
+        gen: (n) => ({
+          text: `Két dobozban ${n.a} és ${n.b} korong van. A korongokat egyenlően osztják el ${n.c} játékos között. Hány korong jut mindegyik játékosnak?`,
+        }),
       },
     ],
   },

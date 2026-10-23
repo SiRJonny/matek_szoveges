@@ -17,10 +17,28 @@
       </div>
       <div class="actions">
         <button id="btn-print" class="btn primary">🖨️ Nyomtatás / mentés PDF</button>
-        <button id="btn-shuffle" class="btn">🎲 Új számok minden feladathoz</button>
+        <button id="btn-shuffle" class="btn">🎲 Új szövegek + számok</button>
         <button id="btn-key" class="btn">🙈 Megoldókulcs elrejtése</button>
       </div>
-      <p class="tip">Kattints bármelyik feladatra (vagy a megoldókulcs megfelelő sorára): új számokat sorsol, és az eredményt is frissíti.</p>
+      <div class="block">
+        <h2 class="block-title">Számok</h2>
+        <div class="range-row">
+          <span class="range-label">Operandus</span>
+          <input id="op-min" type="number" min="1" value="10" aria-label="Operandus minimum"> –
+          <input id="op-max" type="number" min="1" value="999" aria-label="Operandus maximum">
+        </div>
+        <div class="range-row">
+          <span class="range-label">Eredmény</span>
+          <input id="res-min" type="number" min="0" value="0" aria-label="Eredmény minimum"> –
+          <input id="res-max" type="number" min="0" value="999" aria-label="Eredmény maximum">
+        </div>
+        <label class="check">
+          <input type="checkbox" id="neg-check">
+          <span>Negatív számok engedélyezése</span>
+        </label>
+        <p class="hint-neg">Engedélyezés után a „mennyi maradt” és a „visszajáró” típusú feladatok eredménye lehet negatív (tartozás).</p>
+      </div>
+      <p class="tip">Kattints bármelyik feladatra gombjai közül: <b>új szöveg</b> másik történetet hoz, <b>új számok</b> ugyanazt a történetet sorsolja újra, <b>másolás</b> a feladatszöveget teszi a vágólapra.</p>
       <p class="goto"><a href="#worksheet">↑ Feladatlap</a> · <a href="#answers">↑ Megoldókulcs</a></p>
     </aside>
 
@@ -54,7 +72,7 @@
   </div>
 
   <footer class="foot no-print">
-    <p>Mindet a böngésző randomizál, nem kell szerver hozzá. Az adatok a <code>js/data.js</code> fájlban szerkeszthetők.</p>
+    <p>Mindet a böngésző randomizál, nem kell szerver hozzá. A feladatkészlet és a számhatárok a <code>js/data.js</code> fájlban és a bal oldali beállításoknál módosíthatók.</p>
   </footer>
 
   <script src="js/data.js"></script>
